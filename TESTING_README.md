@@ -5,9 +5,10 @@ This document covers local setup and end-to-end smoke testing for the React fron
 ## Project layout
 
 ```
-minor_project/
-├── backend_project/backendzip/backend/   # Spring Boot 3.4.5, Java 21, MySQL
-├── frontend_project/frontend/            # React 19, Vite 6
+major_project/
+├── backend/          # Spring Boot 3.4.5, Java 21, MySQL
+├── frontend/         # React 19, Vite 6
+├── README.md         # Full project documentation
 └── TESTING_README.md
 ```
 
@@ -35,7 +36,7 @@ The backend uses `spring.jpa.hibernate.ddl-auto=update`, so tables are created a
 
 ## 2. Backend configuration
 
-The backend loads `backend_project/backendzip/backend/.env` at startup.
+The backend loads `backend/.env` at startup.
 
 Required/commonly used keys:
 
@@ -66,7 +67,7 @@ Notes:
 
 ## 3. Start the backend
 
-From `backend_project/backendzip/backend`:
+From `backend`:
 
 ```bash
 mvn spring-boot:run
@@ -84,7 +85,7 @@ If Java is not found, set `JAVA_HOME` to a JDK 21 installation and reopen the te
 
 ## 4. Frontend configuration
 
-From `frontend_project/frontend`:
+From `frontend`:
 
 ```bash
 cp .env.example .env.local
@@ -296,14 +297,14 @@ curl -s -X DELETE "$BASE/api/projects/$PROJECT_ID" \
 Frontend production build:
 
 ```bash
-cd frontend_project/frontend
+cd frontend
 npm run build
 ```
 
 Backend compile/package:
 
 ```bash
-cd backend_project/backendzip/backend
+cd backend
 mvn clean package
 ```
 
@@ -335,5 +336,5 @@ There are currently no frontend unit/E2E tests and no backend test classes in th
 ## 10. Cleanup
 
 - Delete test users/projects through the UI or MySQL if needed.
-- Generated files are stored under `backend_project/backendzip/backend/data/blueprint-ai`.
+- Generated files are stored under `backend/data/blueprint-ai`.
 - Stop the backend and frontend processes after testing.
