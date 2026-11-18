@@ -8,7 +8,9 @@ import EditorPage from "./pages/EditorPage";
 import PreviewPage from "./pages/PreviewPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
+import BillingPage from "./pages/BillingPage";
 import GitHubCallbackPage from "./pages/GitHubCallbackPage";
+import VercelCallbackPage from "./pages/VercelCallbackPage";
 import AppLayout from "./components/layout/AppLayout";
 import { ProtectedRoute } from "./components/auth";
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
@@ -41,6 +43,9 @@ export default function App() {
           path: "/settings",
           element: /*#__PURE__*/_jsx(SettingsPage, {})
         }), /*#__PURE__*/_jsx(Route, {
+          path: "/billing",
+          element: /*#__PURE__*/_jsx(BillingPage, {})
+        }), /*#__PURE__*/_jsx(Route, {
           path: "/project/:projectId",
           element: /*#__PURE__*/_jsx(EditorPage, {})
         }), /*#__PURE__*/_jsx(Route, {
@@ -50,6 +55,9 @@ export default function App() {
       }), /*#__PURE__*/_jsx(Route, {
         path: "/auth/github/callback",
         element: /*#__PURE__*/_jsx(GitHubCallbackPage, {})
+      }), /*#__PURE__*/_jsx(Route, {
+        path: "/auth/vercel/callback",
+        element: /*#__PURE__*/_jsx(VercelCallbackPage, {})
       }), /*#__PURE__*/_jsx(Route, {
         path: "*",
         element: /*#__PURE__*/_jsx(Navigate, {

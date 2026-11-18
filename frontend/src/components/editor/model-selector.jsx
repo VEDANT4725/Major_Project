@@ -106,6 +106,11 @@ export function ModelSelector({
                             Pro
                           </Badge>
                         )}
+                        {model.accessLabel && (
+                          <Badge variant="outline" className="h-4 px-1 text-[9px] uppercase">
+                            {model.accessLabel}
+                          </Badge>
+                        )}
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">
                         {model.description}

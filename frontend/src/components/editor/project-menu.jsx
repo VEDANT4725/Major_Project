@@ -28,7 +28,7 @@ export function ProjectMenu({
   projectName,
   projectId,
   creditsRemaining,
-  creditsTotal = 50,
+  creditsTotal = 100,
   userPlan,
   onRename,
   onDelete

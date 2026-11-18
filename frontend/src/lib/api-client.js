@@ -53,7 +53,25 @@ export function createApiClient(getToken) {
       getHistory: projectId => authenticatedFetch(getToken, `/api/chat/${projectId}`)
     },
     credits: {
-      get: () => authenticatedFetch(getToken, `/api/credits`)
+      get: () => authenticatedFetch(getToken, `/api/credits`),
+      canEdit: () => authenticatedFetch(getToken, `/api/credits/can-edit`),
+      getTransactions: () => authenticatedFetch(getToken, `/api/credits/transactions`),
+      getDemoConfig: () => authenticatedFetch(getToken, `/api/credits/demo-config`),
+      createCheckout: data => authenticatedFetch(getToken, `/api/credits/checkout/order`, {
+        method: "POST",
+        body: JSON.stringify(data)
+      }),
+      verifyCheckout: data => authenticatedFetch(getToken, `/api/credits/checkout/verify`, {
+        method: "POST",
+        body: JSON.stringify(data)
+      }),
+      reconcileCheckout: () => authenticatedFetch(getToken, `/api/credits/checkout/reconcile`, {
+        method: "POST"
+      }),
+      purchaseDemoPack: packId => authenticatedFetch(getToken, `/api/credits/demo-purchase`, {
+        method: "POST",
+        body: JSON.stringify({ packId })
+      })
     },
     versions: {
       list: projectId => authenticatedFetch(getToken, `/api/projects/${projectId}/versions`),
@@ -80,7 +98,40 @@ export function createApiClient(getToken) {
       disconnectGithub: () => authenticatedFetch(getToken, "/api/settings/github", {
         method: "DELETE"
       }),
-      getGithubToken: () => authenticatedFetch(getToken, "/api/settings/github/token")
+      getGithubToken: () => authenticatedFetch(getToken, "/api/settings/github/token"),
+      getVercel: () => authenticatedFetch(getToken, "/api/settings/vercel"),
+      getVercelOauthUrl: projectId => authenticatedFetch(
+        getToken,
+        `/api/settings/vercel/oauth/url${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`
+      ),
+      connectVercelOauth: ({ code, state, teamId }) => authenticatedFetch(getToken, "/api/settings/vercel/oauth", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          ...(state ? { state } : {}),
+          ...(teamId ? { teamId } : {})
+        })
+      }),
+      connectVercel: (token, teamId) => authenticatedFetch(getToken, "/api/settings/vercel", {
+        method: "POST",
+        body: JSON.stringify({
+          token,
+          ...(teamId ? { teamId } : {})
+        })
+      }),
+      disconnectVercel: () => authenticatedFetch(getToken, "/api/settings/vercel", {
+        method: "DELETE"
+      })
+    },
+    deploy: {
+      vercel: (projectId, data) => authenticatedFetch(getToken, `/api/deploy/vercel/${projectId}`, {
+        method: "POST",
+        body: JSON.stringify(data || {})
+      }),
+      getVercelStatus: (deploymentId, teamId) => authenticatedFetch(
+        getToken,
+        `/api/deploy/vercel/status/${encodeURIComponent(deploymentId)}${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ""}`
+      )
     },
     analytics: {
       get: () => authenticatedFetch(getToken, "/api/analytics")

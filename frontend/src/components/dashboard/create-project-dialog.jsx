@@ -8,8 +8,16 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 const AI_MODELS = [{
+  value: "groq-llama-3.3-70b",
+  label: "GPT-OSS 120B (Groq - Default)",
+  disabled: false
+}, {
   value: "gemini-3.1-flash",
-  label: "Gemini 3.1 Flash (Free - Default)",
+  label: "Gemini 3.1 Flash (Google - Free)",
+  disabled: false
+}, {
+  value: "grok-beta",
+  label: "Grok Beta (xAI)",
   disabled: false
 }, {
   value: "gpt-4o-mini",

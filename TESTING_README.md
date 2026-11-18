@@ -75,6 +75,25 @@ mvn spring-boot:run
 
 Expected startup: Tomcat listening on `http://localhost:8080`.
 
+To try the test-only billing checkout, start with the `dev` profile (it enables
+the mock checkout; it does not collect money):
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="dev"
+mvn spring-boot:run
+```
+
+The demo packs add test credits and create clearly marked demo history entries.
+They are not real prices or a live payment provider. The default profile keeps
+demo checkout disabled.
+
+To test the Razorpay gateway, create Razorpay **Test Mode** API credentials and
+put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in the ignored `backend/.env`.
+For webhook testing, set `RAZORPAY_WEBHOOK_SECRET` to the webhook secret configured
+for `POST /api/billing/webhook`. Keep `RAZORPAY_LIVE_ENABLED=false`; the Pro plan
+is a one-time 30-day purchase and does not auto-renew. Do not paste credentials
+into source files, commits, or chat.
+
 Health check:
 
 ```bash
@@ -155,7 +174,7 @@ curl -s "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN"
 curl -s "$BASE/api/credits" -H "Authorization: Bearer $TOKEN"
 ```
 
-Expected: free users start with 50 credits and plan `FREE`.
+Expected: free users start with 100 credits and plan `FREE`.
 
 ### 6.3 Create a project
 

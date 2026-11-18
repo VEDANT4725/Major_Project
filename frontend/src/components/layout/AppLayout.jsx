@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BarChart3, Menu, Settings, X, Zap, Infinity, LogOut } from "lucide-react";
+import { BarChart3, CreditCard, Menu, Settings, X, Zap, Infinity, LogOut } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import React, { useState, useEffect } from "react";
@@ -15,6 +15,10 @@ const NAV_ITEMS = [{
   label: "Analytics",
   href: "/analytics",
   icon: BarChart3
+}, {
+  label: "Billing",
+  href: "/billing",
+  icon: CreditCard
 }, {
   label: "Settings",
   href: "/settings",
@@ -160,7 +164,7 @@ export default function AppLayout() {
               }
             })
           }), /*#__PURE__*/_jsxs(Link, {
-            to: "/settings",
+            to: "/billing",
             className: "mt-3.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground px-3 py-1.5 text-xs font-bold transition-all duration-150 active:scale-95 border border-border/40",
             children: [/*#__PURE__*/_jsx(Zap, {
               className: "size-3 text-primary fill-primary/20 animate-bounce"

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sparkles, Code, MessageSquare } from "lucide-react";
 import { getModelById } from "@/lib/models";
 import { MessageBubble } from "./message-bubble";
@@ -14,26 +13,40 @@ export function ChatPanel({
   selectedModelId,
   onModelChange,
   userPlan,
-  files = {}
+  files = {},
+  canEdit = true
 }) {
   const messagesEndRef = useRef(null);
+  const scrollAreaRef = useRef(null);
   const selectedModel = getModelById(selectedModelId);
   const supportsVision = selectedModel?.supportsVision ?? false;
 
-  // ✅ Auto scroll
+  // Keep the latest message centered without scrolling the page horizontally.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
+    const viewport = scrollAreaRef.current;
+    const latestMessage = messagesEndRef.current;
+    if (!viewport || !latestMessage) return;
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const messageRect = latestMessage.getBoundingClientRect();
+    const messageTop = viewport.scrollTop + messageRect.top - viewportRect.top;
+    const centeredTop = messageTop - (viewport.clientHeight - messageRect.height) / 2;
+    viewport.scrollTo({
+      top: Math.max(0, centeredTop),
       behavior: "smooth"
     });
   }, [messages, isStreaming]);
   return /*#__PURE__*/_jsxs("div", {
-    className: "flex h-full flex-col bg-background",
-    children: [/*#__PURE__*/_jsx(ScrollArea, {
-      className: "flex-1 overflow-hidden",
+    className: "flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background",
+    children: [/*#__PURE__*/_jsxs("div", {
+      ref: scrollAreaRef,
+      role: "log",
+      "aria-live": "polite",
+      className: "min-h-0 min-w-0 w-full max-w-full flex-1 overflow-x-hidden overflow-y-auto",
       children: /*#__PURE__*/_jsxs("div", {
-        className: "flex flex-col gap-5 p-4",
+        className: "box-border flex min-h-full w-full min-w-0 max-w-full flex-col gap-5 overflow-x-hidden p-4 chat-panel-content",
         children: [messages.length === 0 && /*#__PURE__*/_jsxs("div", {
-          className: "flex flex-1 flex-col items-center justify-center px-6 py-16 text-center",
+          className: "flex flex-1 flex-col items-center justify-center px-6 text-center",
           children: [/*#__PURE__*/_jsxs("div", {
             className: "relative mb-5",
             children: [/*#__PURE__*/_jsx("div", {
@@ -60,16 +73,21 @@ export function ChatPanel({
               label: "A chat app"
             }].map(suggestion => /*#__PURE__*/_jsxs("button", {
               onClick: () => onSendMessage(suggestion.label),
+              disabled: isStreaming,
               className: "flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted transition",
               children: [/*#__PURE__*/_jsx(suggestion.icon, {
                 className: "size-3"
               }), suggestion.label]
             }, suggestion.label))
           })]
-        }), messages.map((message, index) => /*#__PURE__*/_jsx(MessageBubble, {
-          message: message,
-          isStreaming: isStreaming && message.role === "assistant" && index === messages.length - 1,
-          isAutoHealInProgress: isStreaming && message.role === "user" && index === messages.length - 2
+        }), messages.map((message, index) => /*#__PURE__*/_jsx("div", {
+          ref: index === messages.length - 1 ? messagesEndRef : undefined,
+          className: "box-border w-full min-w-0 max-w-full",
+          children: /*#__PURE__*/_jsx(MessageBubble, {
+            message: message,
+            isStreaming: isStreaming && message.role === "assistant" && index === messages.length - 1,
+            isAutoHealInProgress: isStreaming && message.role === "user" && index === messages.length - 2
+          })
         }, message.id))]
       })
     }), /*#__PURE__*/_jsx(ChatInput, {
@@ -81,7 +99,8 @@ export function ChatPanel({
       files: files,
       selectedModelId: selectedModelId,
       onModelChange: onModelChange,
-      userPlan: userPlan
+      userPlan: userPlan,
+      canEdit: canEdit
     })]
   });
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { SandpackProvider, SandpackLayout, SandpackPreview, useSandpack } from "@codesandbox/sandpack-react";
-import { CheckCircle2, Loader2, Circle } from "lucide-react";
+import { CheckCircle2, Loader2, Circle, Sparkles } from "lucide-react";
 
 // Listens for Sandpack errors and dispatches a custom DOM event.
 // The parent page captures this event and sets previewError state.
@@ -67,6 +67,12 @@ export function PreviewPanel({
     acc[spPath] = content;
     return acc;
   }, {});
+  const appEntry = files["src/App.tsx"] || files["src/App.jsx"] ||
+    files["src/App.ts"] || files["src/App.js"] || "";
+  const isStarterTemplate = appEntry.includes("Your project is ready to go!");
+  const hasGeneratedComponents = Object.keys(files).some(path =>
+    /^\/?src\/(components|pages)\//.test(path)
+  );
 
   // Parse env files (.env, .env.local, etc.)
   const envVars = {};
@@ -297,7 +303,8 @@ export function PreviewPanel({
       })]
     });
   }
-  const showLoading = !hasFiles;
+  // Show loading screen when streaming OR when no files exist
+  const showLoading = isStreaming || !hasFiles;
   if (showLoading) {
     return /*#__PURE__*/_jsxs("div", {
       className: "h-full w-full flex flex-col items-center justify-center bg-card text-card-foreground",
@@ -313,10 +320,35 @@ export function PreviewPanel({
         })]
       }), /*#__PURE__*/_jsx("h3", {
         className: "text-lg font-semibold text-foreground tracking-tight",
-        children: "Waiting for files..."
+        children: isStreaming ? "Generating your project..." : "Waiting for files..."
       }), /*#__PURE__*/_jsx("p", {
         className: "mt-2 max-w-[280px] text-sm text-center text-muted-foreground",
-        children: "Describe your project in the chat to start generating code."
+        children: isStreaming ? "AI is building your project. This may take a moment." : "Describe your project in the chat to start generating code."
+      })]
+    });
+  }
+  if (isStarterTemplate) {
+    return /*#__PURE__*/_jsxs("div", {
+      className: "flex h-full w-full flex-col items-center justify-center bg-card px-6 text-center text-card-foreground",
+      children: [/*#__PURE__*/_jsx("div", {
+        className: "mb-4 flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-background",
+        children: /*#__PURE__*/_jsx("span", {
+          children: /*#__PURE__*/_jsx(Sparkles, {
+            className: "size-6 text-primary"
+          })
+        })
+      }), /*#__PURE__*/_jsx("h3", {
+        className: "text-lg font-semibold",
+        children: hasGeneratedComponents ? "Your app entry point is still the starter screen" : "Your preview will appear here"
+      }), /*#__PURE__*/_jsx("p", {
+        className: "mt-2 max-w-sm text-sm text-muted-foreground",
+        children: hasGeneratedComponents
+          ? "The AI created page and component files but did not connect them to src/App. Ask AI to wire the generated components into the app entry point."
+          : "Describe what you want to build in the chat. The preview will update when the AI finishes generating your files."
+      }), hasGeneratedComponents && onFixError && /*#__PURE__*/_jsx("button", {
+        onClick: () => onFixError("Generated page/component files exist, but src/App still contains the starter screen. Inspect the complete codebase, replace only the app entry point as needed, and import and render the generated components using their existing context and exports. Preserve the generated design and functionality. Do not leave the starter placeholder."),
+        className: "mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors",
+        children: "Connect generated files"
       })]
     });
   }

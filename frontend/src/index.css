@@ -99,3 +99,127 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Sandpack preview styles */
+.sandpack-stretch {
+  height: 100% !important;
+  width: 100% !important;
+}
+.sandpack-stretch .sp-wrapper {
+  height: 100% !important;
+  width: 100% !important;
+}
+.sandpack-stretch .sp-layout {
+  height: 100% !important;
+  width: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+.sandpack-stretch .sp-preview {
+  height: 100% !important;
+  width: 100% !important;
+}
+.sandpack-stretch .sp-preview-iframe {
+  height: 100% !important;
+  width: 100% !important;
+}
+.sandpack-stretch .sp-preview-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+.sandpack-stretch .sp-stack {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Chat panel text wrapping fix */
+.chat-panel-content {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  max-width: 100%;
+}
+
+.chat-panel-content * {
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.chat-panel-content .prose,
+.chat-panel-content .prose > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-panel-content .prose pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-panel-content .prose table {
+  display: block;
+  overflow-x: auto;
+}
+
+.chat-panel-content .prose img {
+  height: auto;
+}
+
+.chat-message-prose {
+  line-height: 1.75;
+}
+
+.chat-message-prose p {
+  margin: 0 0 0.9rem;
+  white-space: pre-line;
+}
+
+.chat-message-prose p:last-child,
+.chat-message-prose ul:last-child,
+.chat-message-prose ol:last-child,
+.chat-message-prose blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-prose h1,
+.chat-message-prose h2,
+.chat-message-prose h3,
+.chat-message-prose h4 {
+  margin: 1.1rem 0 0.55rem;
+  line-height: 1.35;
+}
+
+.chat-message-prose ul,
+.chat-message-prose ol {
+  margin: 0.55rem 0 0.9rem;
+  padding-left: 1.4rem;
+}
+
+.chat-message-prose li + li {
+  margin-top: 0.35rem;
+}
+
+.chat-message-prose ul > li::marker {
+  color: #a78bfa;
+}
+
+.chat-message-prose ol > li::marker {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.chat-message-prose strong {
+  font-weight: 650;
+}
+
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

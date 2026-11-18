@@ -45,6 +45,8 @@ public class ChatService {
 
     private static final int MAX_CONTEXT_MESSAGES = 10;
     private static final int MAX_MESSAGE_LENGTH = 4000;
+    private static final int PROJECT_CREATION_COST = 10;
+    private static final int PROJECT_EDIT_COST = 3;
 
     public List<Map<String, Object>> getChatHistory(String projectId) {
         projectService.findProjectOrThrow(projectId);
@@ -69,9 +71,12 @@ public class ChatService {
     private void completeWithError(SseEmitter emitter, String message, String code) {
         try {
             sendSseEvent(emitter, "error", Map.of("message", message, "code", code));
-            emitter.complete();
         } catch (Exception ex) {
-            emitter.completeWithError(ex);
+            log.warn("Failed to send SSE error event to client: {}", ex.getMessage());
+        } finally {
+            try {
+                emitter.complete();
+            } catch (Exception ignored) {}
         }
     }
 
@@ -85,7 +90,6 @@ public class ChatService {
 
         String modelId = request.getModel() != null ? request.getModel() : ModelRegistry.DEFAULT_MODEL;
         ModelConfig modelConfig = ModelRegistry.getModel(modelId);
-        int creditCost = modelConfig.getCreditCost();
 
         if ("premium".equalsIgnoreCase(modelConfig.getTier())
                 && creditsService.getCredits().getPlan() != PlanType.PRO) {
@@ -93,9 +97,20 @@ public class ChatService {
                     "The " + modelConfig.getDisplayName() + " model requires a Pro plan");
         }
 
+        Project project = projectService.findProjectOrThrow(projectId);
+
+        // Determine if this is a new project creation or an edit
+        boolean isNewProject = project.getCurrentVersion() <= 1;
+        int creditCost = isNewProject ? PROJECT_CREATION_COST : PROJECT_EDIT_COST;
+
+        // Check if user can edit (for existing projects)
+        if (!isNewProject && !creditsService.canEditWithCurrentCredits()) {
+            throw new CreditExhaustedException(
+                    "Not enough credits to continue editing. Please upgrade your plan to get more credits.");
+        }
+
         creditsService.checkCredits(creditCost);
 
-        Project project = projectService.findProjectOrThrow(projectId);
         List<Map<String, String>> existingFiles = versionService.getVersionFiles(
                 projectId, project.getCurrentVersion());
 
@@ -122,11 +137,12 @@ public class ChatService {
         sendSseEvent(emitter, "connected", Map.of("message", "Stream started"));
 
         StringBuilder fullResponse = new StringBuilder();
+        log.info("Starting generation for project {} with model {} (provider {})",
+                projectId, modelConfig.getApiModelId(), modelConfig.getProvider());
         try {
             List<String> chunks = aiProviderService.streamChat(modelId, systemPrompt, aiMessages);
 
             int chunkCount = 0;
-            List<String> lastTasks = List.of();
             for (String chunk : chunks) {
                 fullResponse.append(chunk);
                 sendSseEvent(emitter, "chunk", Map.of("text", chunk));
@@ -135,8 +151,6 @@ public class ChatService {
                 if (chunkCount % 5 == 0) {
                     List<Map<String, String>> tasks = fileParser.extractTasks(fullResponse.toString());
                     if (!tasks.isEmpty()) {
-                        String tasksJson = objectMapper.writeValueAsString(tasks);
-                        String currentTaskKey = tasksJson;
                         sendSseEvent(emitter, "task", Map.of("tasks", tasks));
                     }
                 }
@@ -144,6 +158,11 @@ public class ChatService {
                 if (chunkCount % 20 == 0) {
                     sendSseEvent(emitter, "ping", Map.of("time", System.currentTimeMillis()));
                 }
+            }
+
+            List<Map<String, String>> finalTasks = fileParser.extractTasks(fullResponse.toString());
+            if (!finalTasks.isEmpty()) {
+                sendSseEvent(emitter, "task", Map.of("tasks", finalTasks));
             }
         } catch (Exception e) {
             log.error("AI provider error", e);
@@ -156,9 +175,13 @@ public class ChatService {
             return;
         }
 
+        log.info("AI response received for project {}: {} characters",
+                projectId, fullResponse.length());
         List<Map<String, String>> parsedFiles = fileParser.parseFilesFromResponse(fullResponse.toString());
 
         if (parsedFiles.isEmpty()) {
+            log.warn("AI response for project {} contained no valid project files (model {})",
+                    projectId, modelConfig.getApiModelId());
             sendSseEvent(emitter, "error", Map.of(
                     "message", "AI did not generate any valid files",
                     "code", "INVALID_AI_FORMAT"));
@@ -168,6 +191,7 @@ public class ChatService {
         }
 
         List<Map<String, String>> mergedFiles = fileParser.mergeFiles(existingFiles, parsedFiles);
+        log.info("Applying {} generated files to project {}", parsedFiles.size(), projectId);
         int newVersion = project.getCurrentVersion() + 1;
 
         List<String> changedFilePaths = parsedFiles.stream()
@@ -179,7 +203,13 @@ public class ChatService {
 
         projectService.incrementVersion(project);
 
-        creditsService.deductCredits(creditCost);
+        // Use appropriate deduction method based on whether it's a new project or edit
+        CreditsResponse credits;
+        if (isNewProject) {
+            credits = creditsService.checkAndDeductCredits(creditCost);
+        } else {
+            credits = creditsService.deductCreditsForEdit(creditCost);
+        }
 
         String explanation = fileParser.extractExplanation(fullResponse.toString());
 
@@ -191,7 +221,6 @@ public class ChatService {
 
         sendSseEvent(emitter, "files", Map.of("files", responseFiles));
 
-        CreditsResponse credits = creditsService.getCredits();
         sendSseEvent(emitter, "done", Map.of(
                 "versionId", projectId + "-v" + newVersion,
                 "version", newVersion,

@@ -38,7 +38,7 @@
 
 ## ✨ Key Features
 
-- **Multi-Model AI Generation**: Supports Google Gemini, Anthropic Claude, OpenAI GPT, DeepSeek, and Grok.
+- **Multi-Model AI Generation**: Supports Groq, Google Gemini, Anthropic Claude, OpenAI GPT, DeepSeek, and xAI Grok.
 - **Interactive Code Editor & Live Preview**: Real-time sandboxed preview alongside Monaco/CodeMirror code editor.
 - **Granular Version Control**: Every prompt generation or manual edit creates an immutable project snapshot (`v0`, `v1`, etc.) with 1-click rollback.
 - **Credit & Tier System**: Tiered access (Free vs. Pro) with credit deduction per model generation.
@@ -145,7 +145,9 @@ COLLATE utf8mb4_unicode_ci;
    DB_USERNAME=root
    DB_PASSWORD=your_mysql_password
    JWT_SECRET=your_minimum_32_characters_random_secret_key
-   GOOGLE_AI_API_KEY=your_gemini_api_key
+   GROQ_API_KEY=your_groq_api_key
+   GOOGLE_AI_API_KEY=your_google_ai_api_key
+   GROK_API_KEY=your_xai_api_key
    ```
 
 4. Run the backend server:
@@ -203,11 +205,13 @@ COLLATE utf8mb4_unicode_ci;
 
 | Model | Provider | Tier | Default Credit Cost |
 |---|---|---|---|
-| `gemini-3.1-flash` | Google AI | Free / Pro | 1 credit |
+| `gemini-3.1-flash` | Google AI | Free | 3 credits |
+| `groq-llama-3.3-70b` (app ID) | Groq GPT-OSS 120B | Free | 3 credits |
+| `grok-beta` | xAI | Free | 3 credits |
 | `claude-3-7-sonnet` | Anthropic | Pro | 3 credits |
 | `gpt-4o` | OpenAI | Pro | 3 credits |
 | `deepseek-chat` | DeepSeek | Pro | 2 credits |
-| `grok-2` | xAI | Pro | 2 credits |
+| `openai/gpt-oss-120b` | Groq API model | Free | 3 credits |
 
 ---
 
@@ -215,6 +219,8 @@ COLLATE utf8mb4_unicode_ci;
 
 > [!IMPORTANT]
 > Never commit actual `.env` or `.env.local` files to version control. They are strictly ignored via `.gitignore`. Always use `.env.example` as a template for team members and deployment pipelines.
+>
+> The default model uses `GROQ_API_KEY`. Google AI, Groq, and xAI keys are provider-specific; configure the key matching the selected provider.
 
 ---
 

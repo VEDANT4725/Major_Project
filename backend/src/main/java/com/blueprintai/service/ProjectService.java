@@ -170,6 +170,9 @@ public class ProjectService {
                 .name(project.getName())
                 .model(project.getModel())
                 .currentVersion(project.getCurrentVersion())
+                .vercelProjectName(project.getVercelProjectName())
+                .vercelDeploymentUrl(project.getVercelDeploymentUrl())
+                .vercelLastDeployedAt(project.getVercelLastDeployedAt())
                 .createdAt(project.getCreatedAt())
                 .updatedAt(project.getUpdatedAt())
                 .build();

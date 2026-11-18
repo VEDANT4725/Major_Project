@@ -14,6 +14,9 @@ public class ProjectResponse {
     private String name;
     private String model;
     private int currentVersion;
+    private String vercelProjectName;
+    private String vercelDeploymentUrl;
+    private Instant vercelLastDeployedAt;
     private Instant createdAt;
     private Instant updatedAt;
 }

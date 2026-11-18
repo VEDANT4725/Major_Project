@@ -78,10 +78,26 @@ public class FileParser {
 
     public String extractExplanation(String response) {
         int lastFilesClose = response.lastIndexOf("</files>");
-        if (lastFilesClose >= 0) {
-            return response.substring(lastFilesClose + 8).trim();
+        String explanation = lastFilesClose >= 0
+                ? response.substring(lastFilesClose + 8).trim()
+                : response.trim();
+
+        Matcher codeLines = Pattern.compile(
+                "(?m)^\\s*(?:import\\s+.+\\s+from\\s+|export\\s+(?:const|default|interface|type|function|class)\\b|(?:const|let|var)\\s+\\w+\\s*=|return\\s*\\(|interface\\s+\\w+\\s*\\{)"
+        ).matcher(explanation);
+        int codeLineCount = 0;
+        while (codeLines.find() && ++codeLineCount < 3) {
         }
-        return response.trim();
+
+        if (codeLineCount >= 3) {
+            return "Project files generated and applied successfully.";
+        }
+
+        return explanation
+                .replaceAll("(?s)```[^\\n]*\\R.*?```", "")
+                .replaceAll("(?s)<file\\b[^>]*>.*?</file>", "")
+                .replaceAll("<task\\b[^>]*>.*?</task>", "")
+                .trim();
     }
 
     public List<Map<String, String>> mergeFiles(List<Map<String, String>> existing,

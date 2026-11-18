@@ -17,7 +17,8 @@ export function ChatInput({
   files = {},
   selectedModelId,
   onModelChange,
-  userPlan
+  userPlan,
+  canEdit = true
 }) {
   const [value, setValue] = useState("");
   const [attachedImages, setAttachedImages] = useState([]);
@@ -33,6 +34,9 @@ export function ChatInput({
   const suggestionsRef = useRef(null);
   const isDisabled = isStreaming || isCreditsExhausted;
   const hasContent = value.trim().length > 0 || attachedImages.length > 0 || selectedFiles.length > 0;
+
+  // Show low credit warning when user has <= 3 credits
+  const showLowCreditWarning = creditsRemaining !== undefined && creditsRemaining !== -1 && creditsRemaining <= 3 && creditsRemaining > 0;
 
   // Sync selected files when files list changes (in case a file is deleted)
   useEffect(() => {
@@ -174,12 +178,12 @@ export function ChatInput({
   // -------- SEND --------
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed && attachedImages.length === 0 && selectedFiles.length === 0 || isCreditsExhausted) return;
+    if ((!trimmed && attachedImages.length === 0 && selectedFiles.length === 0) || isStreaming || isCreditsExhausted) return;
     onSend(trimmed || "Describe this image", attachedImages.length > 0 ? attachedImages : undefined, selectedFiles.length > 0 ? selectedFiles : undefined);
     setValue("");
     setAttachedImages([]);
     setSelectedFiles([]);
-  }, [value, attachedImages, selectedFiles, isCreditsExhausted, onSend]);
+  }, [value, attachedImages, selectedFiles, isStreaming, isCreditsExhausted, onSend]);
 
   // -------- KEYBOARD --------
   const handleKeyDown = e => {
@@ -326,6 +330,15 @@ export function ChatInput({
             className: "size-3.5"
           })
         })]
+      })]
+    }), showLowCreditWarning && /*#__PURE__*/_jsxs("div", {
+      className: "mt-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2",
+      children: [/*#__PURE__*/_jsxs("p", {
+        className: "text-xs font-medium text-amber-500",
+        children: ["⚠️ Low Credits: ", creditsRemaining, " remaining"]
+      }), /*#__PURE__*/_jsx("p", {
+        className: "mt-1 text-[10px] text-amber-500/70",
+        children: "Upgrade to Pro for unlimited credits"
       })]
     }), /*#__PURE__*/_jsxs("div", {
       className: "mt-1.5 flex items-center justify-between gap-2 px-1",

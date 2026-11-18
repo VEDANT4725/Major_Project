@@ -101,8 +101,8 @@ export default function EditorPage() {
   /** User's remaining credits (-1 = unlimited, undefined = loading) */
   const [creditsRemaining, setCreditsRemaining] = useState(undefined);
 
-  /** Total credits for the billing period (e.g. 50 for free) */
-  const [creditsTotal, setCreditsTotal] = useState(50);
+  /** Total credits for the billing period (100 for free) */
+  const [creditsTotal, setCreditsTotal] = useState(100);
 
   /** User's current plan — determines model access */
   const [userPlan, setUserPlan] = useState("free");
@@ -112,6 +112,9 @@ export default function EditorPage() {
 
   /** Whether the user has exhausted their free credits */
   const isCreditsExhausted = creditsRemaining !== undefined && creditsRemaining !== -1 && creditsRemaining <= 0;
+
+  /** Whether user can edit current project (for low credit warning) */
+  const [canEdit, setCanEdit] = useState(true);
 
   /**
    * Which old version the user is currently viewing (null = current).
@@ -279,13 +282,19 @@ export default function EditorPage() {
       let chunkCount = 0;
       const startTime = Date.now();
       const taskStatusByDescription = new Map();
-      const buildTaskMarkup = () => Array.from(taskStatusByDescription.entries()).map(([description, status]) => `<task status="${status}">${description}</task>`).join("\n");
+      let receivedCompletion = false;
+      let receivedStreamError = false;
+      initialTasks.forEach(task => taskStatusByDescription.set(task.description, task.status));
+      const buildTaskMarkup = statusOverride => Array.from(taskStatusByDescription.entries()).map(([description, status]) => `<task status="${statusOverride || status}">${description}</task>`).join("\n");
       while (true) {
         const {
           done,
           value
         } = await reader.read();
         if (done) {
+          if (buffer.trim()) {
+            console.warn("[SSE] Stream ended with an incomplete event:", buffer);
+          }
           break;
         }
         buffer += decoder.decode(value, {
@@ -298,11 +307,12 @@ export default function EditorPage() {
           console.error("[SendMessage] Stream timeout - no data received");
           throw new Error("Generation timed out. The AI service may be unavailable.");
         }
-        const lines = buffer.split("\n");
+        const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() || "";
         for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
+          const dataLine = line.match(/^data:\s?(.*)$/);
+          if (!dataLine) continue;
+          const data = dataLine[1].trim();
           if (!data) continue;
           try {
             const event = JSON.parse(data);
@@ -368,22 +378,44 @@ export default function EditorPage() {
               // Clear any preview error when new files arrive
               setPreviewError(null);
             }
-            if (event.event === "error") {
-              console.error("[SSE] Error event received:", event.data);
-              toast.error(event.data.text || "AI generation error");
-              setIsStreaming(false);
-              isStreamingRef.current = false;
-              return;
+            if (event.event === "error" || event.error || event.code && !event.versionId) {
+              const errorData = event.data && typeof event.data === "object" ? event.data : event;
+              const code = errorData.code || event.code || "GENERATION_FAILED";
+              const message = errorData.message || errorData.text || event.error || "AI generation failed";
+              receivedStreamError = true;
+              console.error("[SSE] AI generation failed:", code, message);
+              if (code === "RATE_LIMITED") {
+                setRateLimitedUntil(Date.now() + 60000);
+                window.dispatchEvent(new CustomEvent("rate-limited", {
+                  detail: {
+                    retryAfter: 60
+                  }
+                }));
+              }
+              setCurrentTasks(prev => prev.map(task => ({
+                ...task,
+                status: task.status === "completed" ? "completed" : "failed"
+              })));
+              setMessages(prev => prev.map(msg => msg.id === aiMessageId ? {
+                ...msg,
+                content: `${buildTaskMarkup("failed")}\n\nError (${code}): ${message}`
+              } : msg));
+              toast.error(`${code}: ${message}`);
+              continue;
             }
 
             // ---- DONE ----
             if (event.versionId || event.model) {
+              receivedCompletion = Boolean(event.versionId);
+              taskStatusByDescription.forEach((_, description) =>
+                taskStatusByDescription.set(description, "completed")
+              );
               // Set all tasks to completed in currentTasks state
               setCurrentTasks(prev => prev.map(t => ({
                 ...t,
                 status: "completed"
               })));
-              const tasksMarkup = buildTaskMarkup();
+              const tasksMarkup = buildTaskMarkup("completed");
               const changedCount = Array.isArray(event.changedFiles) ? event.changedFiles.length : 0;
               const completionNote = changedCount > 0 ? `Build complete. Updated ${changedCount} files and synced preview.` : "Build complete. Project synced to editor and preview.";
               const finalContent = `${tasksMarkup}\n\n${completionNote}`;
@@ -424,25 +456,18 @@ export default function EditorPage() {
               }));
             }
 
-            // ---- ERROR FROM STREAM ----
-            if (event.error || event.code && event.versionId === undefined) {
-              const msg = event.message || event.error || "Unknown error";
-              const code = event.code || "UNKNOWN";
-              console.error("[SSE] Error received:", code, msg);
-              setMessages(prev => prev.map(m => m.id === aiMessageId ? {
-                ...m,
-                content: `Error (${code}): ${msg}`
-              } : m));
-              toast.error(`${code}: ${msg}`);
-            }
-          } catch {
-            // Ignore bad chunks
+          } catch (error) {
+            console.error("[SSE] Failed to parse event payload:", error);
           }
         }
+      }
+      if (!receivedCompletion && !receivedStreamError) {
+        throw new Error("The AI stream ended before generation completed. Check the backend logs for the provider error.");
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Something went wrong";
       const lower = errorMessage.toLowerCase();
+      console.error("[SendMessage] Generation request failed:", error);
       if (lower.includes("too many requests") || lower.includes("rate limit")) {
         setRateLimitedUntil(Date.now() + 60000);
         window.dispatchEvent(new CustomEvent("rate-limited", {
@@ -451,9 +476,13 @@ export default function EditorPage() {
           }
         }));
       }
+      setCurrentTasks(prev => prev.map(task => ({
+        ...task,
+        status: task.status === "completed" ? "completed" : "failed"
+      })));
       setMessages(prev => prev.map(msg => msg.id === aiMessageId ? {
         ...msg,
-        content: `Error: ${errorMessage}`
+        content: `${initialTasks.map(task => `<task status="failed">${task.description}</task>`).join("\n")}\n\nError: ${errorMessage}`
       } : msg));
       toast.error(errorMessage);
     } finally {
@@ -502,12 +531,30 @@ export default function EditorPage() {
   // ------------------------------------------------------------
   const handleFixError = useCallback(error => {
     setPreviewError(null);
-    const prompt = `The preview has a runtime/build error. Fix ONLY the file(s) causing this error — do NOT rewrite all files. Return only the fixed file(s) in the standard XML format.
+    const prompt = `Fix the preview issue using the complete attached codebase. Change ONLY the affected file(s); do NOT redesign or rewrite the whole website. If generated page/component files exist but src/App.tsx still contains the starter placeholder, replace the placeholder and connect the existing generated components using their actual exports and context. Otherwise, fix the root cause of the reported React runtime/build error. Check component and icon imports for exact, case-sensitive exports, and ensure imports match their actual exports. In particular, lucide-react exports the GitHub icon as "Github", not "GitHub". Return the complete fixed file(s) in the standard XML format.
 
 Error:
 ${error}`;
     handleSendMessageRef.current(prompt, undefined, ["codebase"]);
   }, []);
+
+  // Check if user can edit with current credits
+  useEffect(() => {
+    const checkEditPermission = async () => {
+      if (creditsRemaining === undefined || creditsRemaining === -1) {
+        setCanEdit(true);
+        return;
+      }
+      try {
+        const response = await client.credits.canEdit();
+        setCanEdit(response.canEdit);
+      } catch (error) {
+        console.error("Failed to check edit permission:", error);
+        setCanEdit(true); // Default to true on error
+      }
+    };
+    checkEditPermission();
+  }, [creditsRemaining, client]);
 
   // ------------------------------------------------------------
   // Auto-save: debounced manual edits → new version
@@ -616,11 +663,24 @@ ${error}`;
     const loadProject = async () => {
       try {
         const [projectResponse, filesResponse, chatResponse, versionsResponse, creditsResponse] = await Promise.all([client.projects.get(projectId ?? ""), client.projects.getFiles(projectId ?? ""), client.chats.getHistory(projectId ?? ""), client.versions.list(projectId ?? ""), client.credits.get()]);
-        setProject(projectResponse.project);
+        const projectData = projectResponse.project;
         // Validate model exists in registry, fallback to default if not
-        const projectModel = projectResponse.project.model;
-        const validModel = getModelById(projectModel) ? projectModel : DEFAULT_MODEL_ID;
+        const projectModel = projectData.model;
+        const migrateUnusedLegacyDefault = projectModel === "grok-beta"
+          && projectData.currentVersion === 0;
+        const validModel = migrateUnusedLegacyDefault || !getModelById(projectModel)
+          ? DEFAULT_MODEL_ID
+          : projectModel;
+        setProject({ ...projectData, model: validModel });
         setSelectedModelId(validModel);
+        if (migrateUnusedLegacyDefault) {
+          try {
+            await client.projects.update(projectId ?? "", { model: validModel });
+          } catch (error) {
+            console.error("Failed to update project to the configured default model:", error);
+            toast.error(error.message || "Failed to update project model");
+          }
+        }
         setCreditsRemaining(creditsResponse.isUnlimited ? -1 : creditsResponse.remaining);
         setCreditsTotal(creditsResponse.total);
         setUserPlan(String(creditsResponse.plan || "free").toLowerCase());
@@ -655,7 +715,7 @@ ${error}`;
       }
     };
     loadProject();
-  }, [projectId, getToken, navigate]);
+  }, [projectId, getToken, navigate, client]);
   if (isLoading) return /*#__PURE__*/_jsx(EditorLayoutSkeleton, {});
   return /*#__PURE__*/_jsx(EditorLayout, {
     projectId: projectId ?? "",
@@ -708,7 +768,18 @@ ${error}`;
     onModelChange: handleModelChange,
     userPlan: userPlan,
     onRename: handleRenameProject,
-    onDelete: handleDeleteProject
+    onDelete: handleDeleteProject,
+    canEdit: canEdit,
+    vercelProjectName: project?.vercelProjectName,
+    vercelDeploymentUrl: project?.vercelDeploymentUrl,
+    onVercelDeployed: deployment => {
+      setProject(prev => prev ? {
+        ...prev,
+        vercelProjectName: deployment.projectName || prev.vercelProjectName,
+        vercelDeploymentUrl: deployment.aliasUrl || deployment.url || prev.vercelDeploymentUrl,
+        vercelLastDeployedAt: new Date().toISOString()
+      } : prev);
+    }
   });
 }
 ;

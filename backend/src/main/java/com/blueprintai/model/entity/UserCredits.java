@@ -26,11 +26,19 @@ public class UserCredits {
 
     @Column(nullable = false)
     @Builder.Default
-    private int remaining = 50;
+    private int remaining = 100;
 
     @Column(nullable = false)
     @Builder.Default
-    private int total = 50;
+    private int total = 100;
+
+    @Column(name = "paid_credits", nullable = false, columnDefinition = "integer not null default 0")
+    @Builder.Default
+    private int paidCredits = 0;
+
+    @Column(name = "free_allowance_disabled", nullable = false, columnDefinition = "boolean not null default false")
+    @Builder.Default
+    private boolean freeAllowanceDisabled = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)

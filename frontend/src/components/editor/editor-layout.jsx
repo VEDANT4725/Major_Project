@@ -32,8 +32,12 @@ export const EditorLayout = ({
   selectedModelId,
   onModelChange,
   userPlan,
+  canEdit,
   onRename,
-  onDelete
+  onDelete,
+  vercelProjectName,
+  vercelDeploymentUrl,
+  onVercelDeployed
 }) => {
   const [activeTab, setActiveTab] = useState("preview");
   const [mobilePanel, setMobilePanel] = useState("content");
@@ -92,12 +96,15 @@ export const EditorLayout = ({
       onRename: onRename,
       onDelete: onDelete,
       deviceMode: deviceMode,
-      onDeviceModeChange: setDeviceMode
+      onDeviceModeChange: setDeviceMode,
+      vercelProjectName: vercelProjectName,
+      vercelDeploymentUrl: vercelDeploymentUrl,
+      onVercelDeployed: onVercelDeployed
     }), /*#__PURE__*/_jsxs("div", {
       className: cn("hidden md:flex flex-1 overflow-hidden", isDragging && "select-none"),
       ref: containerRef,
       children: [/*#__PURE__*/_jsx("div", {
-        className: "shrink-0 overflow-hidden",
+        className: "min-h-0 min-w-0 shrink-0 overflow-hidden",
         style: {
           width: `${chatWidthPercent}%`,
           minWidth: MIN_CHAT_PX
@@ -111,7 +118,8 @@ export const EditorLayout = ({
           selectedModelId: selectedModelId,
           onModelChange: onModelChange,
           userPlan: userPlan,
-          files: files
+          files: files,
+          canEdit: canEdit
         })
       }), /*#__PURE__*/_jsx("div", {
         className: cn("panel-resize-handle shrink-0", isDragging && "panel-resize-handle--active"),
@@ -119,7 +127,7 @@ export const EditorLayout = ({
         onPointerUp: handlePointerUp,
         onPointerMove: handlePointerMove
       }), /*#__PURE__*/_jsxs("main", {
-        className: "flex-1 overflow-hidden relative bg-muted/20 flex flex-col",
+        className: "min-h-0 min-w-0 flex-1 overflow-hidden relative bg-muted/20 flex flex-col",
         children: [isDragging && /*#__PURE__*/_jsx("div", {
           className: "absolute inset-0 z-50 bg-transparent cursor-col-resize"
         }), activeTab === "preview" && /*#__PURE__*/_jsxs(_Fragment, {

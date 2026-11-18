@@ -27,7 +27,7 @@
 /**
  * All supported AI models grouped by provider.
  * Order matches the Phase 7 spec — providers listed as:
- * Anthropic → OpenAI → Google → DeepSeek
+ * Anthropic → OpenAI → Google → Groq → DeepSeek → xAI
  */
 export const MODELS = [
 // --- Anthropic ---
@@ -83,6 +83,7 @@ export const MODELS = [
   speed: "very-fast",
   quality: "high",
   creditCost: 1,
+  accessLabel: "Free",
   description: "Standard model used by the platform.",
   supportsVision: true
 }, {
@@ -93,6 +94,7 @@ export const MODELS = [
   speed: "very-fast",
   quality: "high",
   creditCost: 1,
+  accessLabel: "Free",
   description: "Fast iteration model.",
   supportsVision: true
 }, {
@@ -138,6 +140,19 @@ export const MODELS = [
   description: "Reasoning model. Excellent for complex logic and debugging.",
   supportsVision: false
 },
+// --- Groq ---
+{
+  id: "groq-llama-3.3-70b",
+  name: "GPT-OSS 120B (Groq)",
+  provider: "groq",
+  tier: "fast",
+  speed: "fast",
+  quality: "high",
+  creditCost: 3,
+  accessLabel: "Free",
+  description: "Fast Groq-hosted GPT-OSS model for high-quality coding tasks.",
+  supportsVision: false
+},
 // --- xAI ---
 {
   id: "grok-beta",
@@ -154,7 +169,7 @@ export const MODELS = [
 /**
  * Default model ID used when none is specified.
  */
-export const DEFAULT_MODEL_ID = "gemini-3.1-flash";
+export const DEFAULT_MODEL_ID = "groq-llama-3.3-70b";
 
 /**
  * Provider display names for section headers in the model selector.
@@ -163,6 +178,7 @@ export const PROVIDER_LABELS = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   google: "Google",
+  groq: "Groq",
   deepseek: "DeepSeek",
   grok: "xAI"
 };
@@ -170,7 +186,7 @@ export const PROVIDER_LABELS = {
 /**
  * Provider ordering for the model selector dropdown.
  */
-export const PROVIDER_ORDER = ["anthropic", "openai", "google", "deepseek", "grok"];
+export const PROVIDER_ORDER = ["anthropic", "openai", "google", "groq", "deepseek", "grok"];
 
 /**
  * Returns the speed label for a given speed value.

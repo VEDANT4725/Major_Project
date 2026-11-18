@@ -52,8 +52,8 @@ public class AuthService {
         Instant now = Instant.now();
         UserCredits credits = UserCredits.builder()
                 .user(user)
-                .remaining(50)
-                .total(50)
+                .remaining(100)
+                .total(100)
                 .plan(PlanType.FREE)
                 .periodStart(now)
                 .periodEnd(now.plus(30, ChronoUnit.DAYS))

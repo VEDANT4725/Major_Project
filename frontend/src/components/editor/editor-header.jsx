@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { DeviceToggle } from "./device-toggle";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { ProjectMenu } from "./project-menu";
 import { EditorTabs } from "./editor-tabs";
-import { Download, ExternalLink, Eye, Loader2, MessageSquare, Github, CheckCircle2, AlertCircle, ArrowUpRight } from "lucide-react";
+import { Download, ExternalLink, Eye, Loader2, MessageSquare, Github, CheckCircle2, AlertCircle, ArrowUpRight, Copy, Check, Globe, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { useAuth } from "@/components/auth";
@@ -14,6 +14,19 @@ import { zipSync, strToU8 } from "fflate";
 import { createApiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+
+function VercelIcon({ className = "size-3.5" }) {
+  return /*#__PURE__*/_jsx("svg", {
+    viewBox: "0 0 76 65",
+    fill: "currentColor",
+    className: className,
+    "aria-hidden": "true",
+    children: /*#__PURE__*/_jsx("path", {
+      d: "M37.5274 0L75.0548 65H0L37.5274 0Z"
+    })
+  });
+}
+
 export function EditorHeader({
   projectName,
   files,
@@ -28,7 +41,10 @@ export function EditorHeader({
   onRename,
   onDelete,
   deviceMode,
-  onDeviceModeChange
+  onDeviceModeChange,
+  vercelProjectName: savedVercelProjectName,
+  vercelDeploymentUrl: savedVercelDeploymentUrl,
+  onVercelDeployed
 }) {
   const navigate = useNavigate();
   const [isOpening, setIsOpening] = useState(false);
@@ -52,6 +68,36 @@ export function EditorHeader({
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncError, setSyncError] = useState("");
   const [createdRepoUrl, setCreatedRepoUrl] = useState("");
+
+  // Vercel integration states
+  const [vercelConnected, setVercelConnected] = useState(false);
+  const [vercelOauthConfigured, setVercelOauthConfigured] = useState(false);
+  const [vercelUsername, setVercelUsername] = useState(null);
+  const [vercelLoading, setVercelLoading] = useState(true);
+  const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
+  const [vercelProjName, setVercelProjName] = useState("");
+  const [vercelTarget, setVercelTarget] = useState("production");
+  const [vercelTokenInput, setVercelTokenInput] = useState("");
+  const [vercelTeamIdInput, setVercelTeamIdInput] = useState("");
+  const [isConnectingVercel, setIsConnectingVercel] = useState(false);
+  const [isRedirectingVercelOAuth, setIsRedirectingVercelOAuth] = useState(false);
+  const [showVercelTokenFallback, setShowVercelTokenFallback] = useState(false);
+  const [isDeployingVercel, setIsDeployingVercel] = useState(false);
+  const [vercelStep, setVercelStep] = useState("idle"); // idle | uploading | building | ready | error
+  const [vercelReadyState, setVercelReadyState] = useState("");
+  const [vercelDeployUrl, setVercelDeployUrl] = useState("");
+  const [vercelInspectorUrl, setVercelInspectorUrl] = useState("");
+  const [vercelError, setVercelError] = useState("");
+  const [copiedVercelUrl, setCopiedVercelUrl] = useState(false);
+  const vercelPollTimerRef = useRef(null);
+
+  const stopVercelPolling = useCallback(() => {
+    if (vercelPollTimerRef.current) {
+      clearTimeout(vercelPollTimerRef.current);
+      vercelPollTimerRef.current = null;
+    }
+  }, []);
+
   const checkGithubStatus = useCallback(async () => {
     try {
       setGhLoading(true);
@@ -67,20 +113,221 @@ export function EditorHeader({
       setGhLoading(false);
     }
   }, [getToken]);
+  const checkVercelStatus = useCallback(async () => {
+    try {
+      setVercelLoading(true);
+      const client = createApiClient(getToken);
+      const res = await client.settings.getVercel();
+      setVercelConnected(Boolean(res?.connected));
+      setVercelOauthConfigured(Boolean(res?.oauthConfigured));
+      setVercelUsername(res?.connected ? res.username || null : null);
+    } catch (err) {
+      console.error("Failed to check Vercel status in editor header:", err);
+    } finally {
+      setVercelLoading(false);
+    }
+  }, [getToken]);
   useEffect(() => {
     if (projectId) {
       checkGithubStatus();
+      checkVercelStatus();
     }
     const handleStatusChange = () => checkGithubStatus();
+    const handleVercelStatusChange = () => checkVercelStatus();
     window.addEventListener("github-status-changed", handleStatusChange);
-    return () => window.removeEventListener("github-status-changed", handleStatusChange);
-  }, [projectId, checkGithubStatus]);
+    window.addEventListener("vercel-status-changed", handleVercelStatusChange);
+    return () => {
+      window.removeEventListener("github-status-changed", handleStatusChange);
+      window.removeEventListener("vercel-status-changed", handleVercelStatusChange);
+      stopVercelPolling();
+    };
+  }, [projectId, checkGithubStatus, checkVercelStatus, stopVercelPolling]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("vercel") === "connected") {
+      setIsVercelModalOpen(true);
+      setVercelStep("idle");
+      params.delete("vercel");
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, []);
   useEffect(() => {
     if (projectName) {
       const formatted = projectName.toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
       setRepoName(formatted || "project");
     }
   }, [projectName]);
+  useEffect(() => {
+    if (savedVercelProjectName) {
+      setVercelProjName(savedVercelProjectName);
+    } else if (projectName) {
+      const formatted = projectName.toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^[.-]+|[.-]+$/g, "");
+      setVercelProjName(formatted || "webcraft-app");
+    }
+  }, [savedVercelProjectName, projectName]);
+  const handleVercelClick = () => {
+    stopVercelPolling();
+    setIsVercelModalOpen(true);
+    setVercelStep("idle");
+    setVercelReadyState("");
+    setVercelError("");
+    setCopiedVercelUrl(false);
+  };
+  const handleCloseVercelModal = () => {
+    if (isDeployingVercel && vercelStep === "uploading") return;
+    stopVercelPolling();
+    setIsVercelModalOpen(false);
+    setIsDeployingVercel(false);
+    setVercelStep("idle");
+  };
+  const handleVercelOAuthConnect = async () => {
+    try {
+      setIsRedirectingVercelOAuth(true);
+      const client = createApiClient(getToken);
+      const res = await client.settings.getVercelOauthUrl(projectId);
+      if (!res?.url) {
+        throw new Error("Could not generate Vercel OAuth URL.");
+      }
+      window.location.href = res.url;
+    } catch (error) {
+      console.error("Vercel OAuth error:", error);
+      toast.error(error.message || "Vercel OAuth is not configured on the server yet.");
+      setShowVercelTokenFallback(true);
+      setIsRedirectingVercelOAuth(false);
+    }
+  };
+  const handleQuickConnectVercel = async e => {
+    if (e) e.preventDefault();
+    const token = vercelTokenInput.trim();
+    if (!token) {
+      toast.error("Please enter your Vercel access token.");
+      return;
+    }
+    try {
+      setIsConnectingVercel(true);
+      const client = createApiClient(getToken);
+      const res = await client.settings.connectVercel(token, vercelTeamIdInput.trim() || undefined);
+      setVercelConnected(Boolean(res?.connected));
+      setVercelUsername(res?.username || null);
+      setVercelTokenInput("");
+      setVercelTeamIdInput("");
+      toast.success(`Connected Vercel account @${res.username}`);
+      window.dispatchEvent(new CustomEvent("vercel-status-changed"));
+    } catch (error) {
+      console.error("Vercel connect error:", error);
+      toast.error(error.message || "Failed to connect Vercel account.");
+    } finally {
+      setIsConnectingVercel(false);
+    }
+  };
+  const handleVercelDeploy = async () => {
+    try {
+      stopVercelPolling();
+      setIsDeployingVercel(true);
+      setVercelStep("uploading");
+      setVercelReadyState("UPLOADING");
+      setVercelError("");
+      setVercelDeployUrl("");
+      setVercelInspectorUrl("");
+      const client = createApiClient(getToken);
+      const deployment = await client.deploy.vercel(projectId, {
+        projectName: vercelProjName.trim() || undefined,
+        target: vercelTarget,
+        files
+      });
+      const initialUrl = deployment.aliasUrl || deployment.url || "";
+      setVercelDeployUrl(initialUrl);
+      if (deployment.inspectorUrl) {
+        setVercelInspectorUrl(deployment.inspectorUrl);
+      }
+      if (onVercelDeployed) {
+        onVercelDeployed(deployment);
+      }
+      const state = (deployment.readyState || "QUEUED").toUpperCase();
+      setVercelReadyState(state);
+      if (state === "READY") {
+        setVercelStep("ready");
+        setIsDeployingVercel(false);
+        toast.success("Project deployed live on Vercel!");
+        return;
+      }
+      if (state === "ERROR" || state === "CANCELED") {
+        setVercelStep("error");
+        setVercelError(deployment.errorMessage || "Vercel build failed. Open Vercel Inspector for logs.");
+        setIsDeployingVercel(false);
+        return;
+      }
+
+      // Poll Vercel deployment status until READY or ERROR
+      setVercelStep("building");
+      let attempts = 0;
+      const maxAttempts = 60;
+      const pollStatus = async () => {
+        attempts++;
+        try {
+          const status = await client.deploy.getVercelStatus(deployment.deploymentId);
+          const nextState = (status.readyState || "BUILDING").toUpperCase();
+          setVercelReadyState(nextState);
+          const liveUrl = status.aliasUrl || status.url || initialUrl;
+          if (liveUrl) setVercelDeployUrl(liveUrl);
+          if (status.inspectorUrl) setVercelInspectorUrl(status.inspectorUrl);
+          if (nextState === "READY") {
+            stopVercelPolling();
+            setVercelStep("ready");
+            setIsDeployingVercel(false);
+            if (onVercelDeployed) {
+              onVercelDeployed(status);
+            }
+            toast.success("Your site is live on Vercel!");
+            return;
+          }
+          if (nextState === "ERROR" || nextState === "CANCELED") {
+            stopVercelPolling();
+            setVercelStep("error");
+            setVercelError(status.errorMessage || "Vercel build failed. Check the build logs on Vercel Inspector.");
+            setIsDeployingVercel(false);
+            return;
+          }
+          if (attempts >= maxAttempts) {
+            stopVercelPolling();
+            setVercelStep("ready");
+            setIsDeployingVercel(false);
+            toast.info("Deployment is still building on Vercel. You can monitor it in the Vercel Inspector.");
+            return;
+          }
+          vercelPollTimerRef.current = setTimeout(pollStatus, 3000);
+        } catch (pollErr) {
+          console.error("Failed polling Vercel status:", pollErr);
+          if (attempts < maxAttempts) {
+            vercelPollTimerRef.current = setTimeout(pollStatus, 4000);
+          } else {
+            stopVercelPolling();
+            setIsDeployingVercel(false);
+          }
+        }
+      };
+      vercelPollTimerRef.current = setTimeout(pollStatus, 3000);
+    } catch (error) {
+      console.error("Vercel deploy failed:", error);
+      setVercelError(error.message || "Failed to trigger Vercel deployment.");
+      setVercelStep("error");
+      setIsDeployingVercel(false);
+    }
+  };
+  const handleCopyVercelUrl = async urlToCopy => {
+    if (!urlToCopy) return;
+    try {
+      await navigator.clipboard.writeText(urlToCopy);
+      setCopiedVercelUrl(true);
+      toast.success("Copied live URL to clipboard!");
+      setTimeout(() => setCopiedVercelUrl(false), 2000);
+    } catch {
+      toast.error("Failed to copy URL");
+    }
+  };
   const handleGithubClick = () => {
     if (ghConnected) {
       setIsSyncModalOpen(true);
@@ -527,6 +774,23 @@ export function EditorHeader({
           className: "inline sm:hidden",
           children: ghConnected ? "Push" : "Connect"
         })]
+      }), /*#__PURE__*/_jsxs(Button, {
+        size: "sm",
+        onClick: handleVercelClick,
+        disabled: isDeployingVercel,
+        className: "gap-1.5 text-xs bg-foreground text-background hover:bg-foreground/90 font-semibold",
+        title: vercelConnected ? "Deploy this project live to Vercel" : "Connect Vercel to deploy live",
+        children: [isDeployingVercel ? /*#__PURE__*/_jsx(Loader2, {
+          className: "size-3.5 animate-spin"
+        }) : /*#__PURE__*/_jsx(VercelIcon, {
+          className: "size-3"
+        }), /*#__PURE__*/_jsx("span", {
+          className: "hidden sm:inline",
+          children: "Deploy"
+        }), /*#__PURE__*/_jsx("span", {
+          className: "inline sm:hidden",
+          children: "Deploy"
+        })]
       }), /*#__PURE__*/_jsx("div", {
         className: "flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold cursor-pointer",
         title: "Account",
@@ -740,6 +1004,321 @@ export function EditorHeader({
                 setSyncStep("idle");
               },
               children: "Close"
+            })]
+          })]
+        })]
+      })
+    }), isVercelModalOpen && /*#__PURE__*/_jsx("div", {
+      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200",
+      children: /*#__PURE__*/_jsxs("div", {
+        className: "w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl relative animate-in scale-in duration-200",
+        children: [!(isDeployingVercel && vercelStep === "uploading") && /*#__PURE__*/_jsx("button", {
+          onClick: handleCloseVercelModal,
+          className: "absolute top-4 right-4 text-muted-foreground hover:text-foreground text-xs",
+          children: "✕"
+        }), /*#__PURE__*/_jsxs("h3", {
+          className: "text-base font-bold flex items-center gap-2 mb-1.5 text-foreground",
+          children: [/*#__PURE__*/_jsx("span", {
+            className: "flex size-6 items-center justify-center rounded-md bg-foreground text-background",
+            children: /*#__PURE__*/_jsx(VercelIcon, {
+              className: "size-3"
+            })
+          }), "Deploy to Vercel"]
+        }), !vercelConnected ? /*#__PURE__*/_jsxs("div", {
+          className: "space-y-4 mt-2",
+          children: [/*#__PURE__*/_jsx("p", {
+            className: "text-xs text-muted-foreground",
+            children: "Connect your Vercel account to publish this project live in one click."
+          }), /*#__PURE__*/_jsxs("div", {
+            className: "rounded-lg bg-muted/40 p-3.5 border border-border/30 space-y-3",
+            children: [/*#__PURE__*/_jsxs("div", {
+              className: "flex items-center justify-between text-xs",
+              children: [/*#__PURE__*/_jsx("span", {
+                className: "font-semibold text-foreground",
+                children: "One-Click Vercel OAuth"
+              }), /*#__PURE__*/_jsx("span", {
+                className: cn("rounded-full px-2 py-0.5 text-[10px] font-medium", vercelOauthConfigured ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"),
+                children: vercelOauthConfigured ? "Recommended" : "Needs Server Setup"
+              })]
+            }), /*#__PURE__*/_jsx("p", {
+              className: "text-[11px] text-muted-foreground",
+              children: vercelOauthConfigured ? "Authorize securely via Vercel OAuth 2.0 and return straight back to this editor." : "Configure VERCEL_CLIENT_ID & VERCEL_CLIENT_SECRET in backend .env to enable OAuth, or use a Personal Access Token below."
+            }), /*#__PURE__*/_jsxs(Button, {
+              type: "button",
+              onClick: handleVercelOAuthConnect,
+              disabled: isRedirectingVercelOAuth || !vercelOauthConfigured,
+              className: "w-full text-xs font-bold gap-1.5 bg-foreground text-background hover:bg-foreground/90",
+              children: [isRedirectingVercelOAuth ? /*#__PURE__*/_jsx(Loader2, {
+                className: "size-3.5 animate-spin"
+              }) : /*#__PURE__*/_jsx(VercelIcon, {
+                className: "size-3"
+              }), "Connect Vercel via OAuth"]
+            })]
+          }), vercelOauthConfigured && /*#__PURE__*/_jsx("div", {
+            className: "text-center",
+            children: /*#__PURE__*/_jsx("button", {
+              type: "button",
+              onClick: () => setShowVercelTokenFallback(prev => !prev),
+              className: "text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline",
+              children: showVercelTokenFallback ? "Hide Personal Access Token form" : "Or connect manually with a Personal Access Token"
+            })
+          }), (!vercelOauthConfigured || showVercelTokenFallback) && /*#__PURE__*/_jsxs("form", {
+            onSubmit: handleQuickConnectVercel,
+            className: "space-y-3 pt-2 border-t border-border/30",
+            children: [/*#__PURE__*/_jsxs("div", {
+              className: "flex items-center justify-between text-[11px]",
+              children: [/*#__PURE__*/_jsxs("span", {
+                className: "font-semibold text-foreground flex items-center gap-1.5",
+                children: [/*#__PURE__*/_jsx(KeyRound, {
+                  className: "size-3.5 text-primary"
+                }), "Personal Access Token"]
+              }), /*#__PURE__*/_jsxs("a", {
+                href: "https://vercel.com/account/tokens",
+                target: "_blank",
+                rel: "noopener noreferrer",
+                className: "text-primary hover:underline flex items-center gap-1 font-medium",
+                children: ["Create on Vercel", /*#__PURE__*/_jsx(ExternalLink, {
+                  className: "size-3"
+                })]
+              })]
+            }), /*#__PURE__*/_jsx("input", {
+              type: "password",
+              value: vercelTokenInput,
+              onChange: e => setVercelTokenInput(e.target.value),
+              placeholder: "Paste your Vercel token...",
+              autoComplete: "off",
+              className: "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            }), /*#__PURE__*/_jsx("input", {
+              type: "text",
+              value: vercelTeamIdInput,
+              onChange: e => setVercelTeamIdInput(e.target.value),
+              placeholder: "Team ID (Optional — leave blank for personal account)",
+              className: "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "flex gap-2.5 pt-1",
+              children: [/*#__PURE__*/_jsx(Button, {
+                type: "button",
+                variant: "outline",
+                className: "flex-1 text-xs",
+                onClick: handleCloseVercelModal,
+                children: "Cancel"
+              }), /*#__PURE__*/_jsxs(Button, {
+                type: "submit",
+                variant: "secondary",
+                className: "flex-1 text-xs font-bold gap-1.5",
+                disabled: isConnectingVercel || !vercelTokenInput.trim(),
+                children: [isConnectingVercel ? /*#__PURE__*/_jsx(Loader2, {
+                  className: "size-3.5 animate-spin"
+                }) : /*#__PURE__*/_jsx(KeyRound, {
+                  className: "size-3"
+                }), "Connect Token"]
+              })]
+            })]
+          })]
+        }) : /*#__PURE__*/_jsxs(React.Fragment, {
+          children: [/*#__PURE__*/_jsxs("p", {
+            className: "text-xs text-muted-foreground mb-4",
+            children: ["Deploy your live app to Vercel", vercelUsername ? ` as @${vercelUsername}` : "", "."]
+          }), vercelStep === "idle" && /*#__PURE__*/_jsxs("div", {
+            className: "space-y-4",
+            children: [savedVercelDeploymentUrl && /*#__PURE__*/_jsxs("div", {
+              className: "flex items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs",
+              children: [/*#__PURE__*/_jsxs("div", {
+                className: "flex items-center gap-2 min-w-0",
+                children: [/*#__PURE__*/_jsx(Globe, {
+                  className: "size-3.5 text-emerald-400 shrink-0"
+                }), /*#__PURE__*/_jsx("span", {
+                  className: "truncate text-emerald-300 font-mono text-[11px]",
+                  children: savedVercelDeploymentUrl
+                })]
+              }), /*#__PURE__*/_jsxs("a", {
+                href: savedVercelDeploymentUrl,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                className: "text-[11px] font-semibold text-primary hover:underline shrink-0 flex items-center gap-0.5",
+                children: ["Visit", /*#__PURE__*/_jsx(ArrowUpRight, {
+                  className: "size-3"
+                })]
+              })]
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "space-y-1.5",
+              children: [/*#__PURE__*/_jsx("label", {
+                className: "text-[11px] font-bold text-muted-foreground uppercase tracking-wide",
+                children: "Vercel Project Name"
+              }), /*#__PURE__*/_jsx("input", {
+                type: "text",
+                value: vercelProjName,
+                onChange: e => setVercelProjName(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "-")),
+                placeholder: "my-webcraft-app",
+                maxLength: 100,
+                className: "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              }), /*#__PURE__*/_jsx("p", {
+                className: "text-[10px] text-muted-foreground",
+                children: "Lowercase letters, numbers, hyphens, dots, or underscores."
+              })]
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "space-y-1.5",
+              children: [/*#__PURE__*/_jsx("label", {
+                className: "text-[11px] font-bold text-muted-foreground uppercase tracking-wide",
+                children: "Deployment Environment"
+              }), /*#__PURE__*/_jsxs("div", {
+                className: "grid grid-cols-2 gap-2",
+                children: [/*#__PURE__*/_jsxs("button", {
+                  type: "button",
+                  onClick: () => setVercelTarget("production"),
+                  className: cn("rounded-lg border px-3 py-2 text-left transition-all", vercelTarget === "production" ? "border-primary bg-primary/10 text-foreground" : "border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground"),
+                  children: [/*#__PURE__*/_jsx("div", {
+                    className: "text-xs font-bold",
+                    children: "Production"
+                  }), /*#__PURE__*/_jsx("div", {
+                    className: "text-[10px] text-muted-foreground",
+                    children: "Live production domain"
+                  })]
+                }), /*#__PURE__*/_jsxs("button", {
+                  type: "button",
+                  onClick: () => setVercelTarget("preview"),
+                  className: cn("rounded-lg border px-3 py-2 text-left transition-all", vercelTarget === "preview" ? "border-primary bg-primary/10 text-foreground" : "border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground"),
+                  children: [/*#__PURE__*/_jsx("div", {
+                    className: "text-xs font-bold",
+                    children: "Preview"
+                  }), /*#__PURE__*/_jsx("div", {
+                    className: "text-[10px] text-muted-foreground",
+                    children: "Unique preview URL"
+                  })]
+                })]
+              })]
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "flex gap-2.5 pt-2",
+              children: [/*#__PURE__*/_jsx(Button, {
+                variant: "outline",
+                className: "flex-1 text-xs",
+                onClick: handleCloseVercelModal,
+                children: "Cancel"
+              }), /*#__PURE__*/_jsxs(Button, {
+                className: "flex-1 text-xs font-bold gap-1.5 bg-foreground text-background hover:bg-foreground/90",
+                onClick: handleVercelDeploy,
+                disabled: !vercelProjName.trim(),
+                children: [/*#__PURE__*/_jsx(VercelIcon, {
+                  className: "size-3"
+                }), "Deploy Now"]
+              })]
+            })]
+          }), (vercelStep === "uploading" || vercelStep === "building") && /*#__PURE__*/_jsxs("div", {
+            className: "py-6 flex flex-col items-center gap-4 text-center",
+            children: [/*#__PURE__*/_jsx(Loader2, {
+              className: "size-8 text-primary animate-spin"
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "space-y-1",
+              children: [/*#__PURE__*/_jsx("h4", {
+                className: "text-sm font-semibold text-foreground",
+                children: vercelStep === "uploading" ? "Uploading project files to Vercel..." : vercelReadyState === "BUILDING" ? "Building your app on Vercel..." : vercelReadyState === "INITIALIZING" ? "Initializing build container..." : "Queued on Vercel..."
+              }), /*#__PURE__*/_jsx("p", {
+                className: "text-[11px] text-muted-foreground",
+                children: "Vercel is installing dependencies and building your production bundle. Usually takes 30–60s."
+              })]
+            }), /*#__PURE__*/_jsx("span", {
+              className: "inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-mono font-semibold text-primary",
+              children: vercelReadyState || "BUILDING"
+            }), vercelInspectorUrl && /*#__PURE__*/_jsxs("a", {
+              href: vercelInspectorUrl,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: "text-xs text-primary hover:underline flex items-center gap-1",
+              children: ["View Live Build Logs on Vercel", /*#__PURE__*/_jsx(ExternalLink, {
+                className: "size-3"
+              })]
+            })]
+          }), vercelStep === "ready" && /*#__PURE__*/_jsxs("div", {
+            className: "py-4 flex flex-col items-center gap-4 text-center",
+            children: [/*#__PURE__*/_jsx("div", {
+              className: "flex size-14 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400",
+              children: /*#__PURE__*/_jsx(CheckCircle2, {
+                className: "size-7"
+              })
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "space-y-1",
+              children: [/*#__PURE__*/_jsx("h4", {
+                className: "text-sm font-bold text-foreground",
+                children: "Deployed Successfully!"
+              }), /*#__PURE__*/_jsx("p", {
+                className: "text-xs text-muted-foreground",
+                children: "Your website is live on Vercel and ready to share."
+              })]
+            }), vercelDeployUrl && /*#__PURE__*/_jsxs("div", {
+              className: "w-full flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2",
+              children: [/*#__PURE__*/_jsx("span", {
+                className: "flex-1 truncate text-left font-mono text-xs text-foreground",
+                children: vercelDeployUrl
+              }), /*#__PURE__*/_jsx("button", {
+                type: "button",
+                onClick: () => handleCopyVercelUrl(vercelDeployUrl),
+                className: "text-muted-foreground hover:text-foreground p-1 rounded",
+                title: "Copy URL",
+                children: copiedVercelUrl ? /*#__PURE__*/_jsx(Check, {
+                  className: "size-3.5 text-emerald-400"
+                }) : /*#__PURE__*/_jsx(Copy, {
+                  className: "size-3.5"
+                })
+              })]
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "flex gap-2.5 mt-2 w-full",
+              children: [vercelInspectorUrl ? /*#__PURE__*/_jsxs(Button, {
+                variant: "outline",
+                className: "flex-1 text-xs gap-1",
+                onClick: () => window.open(vercelInspectorUrl, "_blank"),
+                children: ["Inspector", /*#__PURE__*/_jsx(ExternalLink, {
+                  className: "size-3"
+                })]
+              }) : /*#__PURE__*/_jsx(Button, {
+                variant: "outline",
+                className: "flex-1 text-xs",
+                onClick: handleCloseVercelModal,
+                children: "Close"
+              }), /*#__PURE__*/_jsxs(Button, {
+                className: "flex-1 text-xs font-bold gap-1 bg-foreground text-background hover:bg-foreground/90",
+                onClick: () => window.open(vercelDeployUrl, "_blank"),
+                disabled: !vercelDeployUrl,
+                children: ["Open Live Site", /*#__PURE__*/_jsx(ArrowUpRight, {
+                  className: "size-3"
+                })]
+              })]
+            })]
+          }), vercelStep === "error" && /*#__PURE__*/_jsxs("div", {
+            className: "py-4 flex flex-col items-center gap-4 text-center",
+            children: [/*#__PURE__*/_jsx("div", {
+              className: "flex size-14 items-center justify-center rounded-full bg-destructive/10 border border-destructive/20 text-destructive",
+              children: /*#__PURE__*/_jsx(AlertCircle, {
+                className: "size-7"
+              })
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "space-y-1.5 w-full",
+              children: [/*#__PURE__*/_jsx("h4", {
+                className: "text-sm font-bold text-foreground",
+                children: "Vercel Deployment Failed"
+              }), /*#__PURE__*/_jsx("p", {
+                className: "text-xs text-destructive bg-destructive/5 rounded-lg border border-destructive/10 p-2.5 max-h-28 overflow-y-auto font-mono text-left break-words",
+                children: vercelError
+              }), vercelInspectorUrl && /*#__PURE__*/_jsxs("a", {
+                href: vercelInspectorUrl,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                className: "inline-flex items-center gap-1 text-xs text-primary hover:underline pt-1",
+                children: ["Inspect Build Logs on Vercel", /*#__PURE__*/_jsx(ExternalLink, {
+                  className: "size-3"
+                })]
+              })]
+            }), /*#__PURE__*/_jsxs("div", {
+              className: "flex gap-2.5 mt-2 w-full",
+              children: [/*#__PURE__*/_jsx(Button, {
+                variant: "outline",
+                className: "flex-1 text-xs",
+                onClick: () => setVercelStep("idle"),
+                children: "Try Again"
+              }), /*#__PURE__*/_jsx(Button, {
+                className: "flex-1 text-xs font-bold",
+                onClick: handleCloseVercelModal,
+                children: "Close"
+              })]
             })]
           })]
         })]

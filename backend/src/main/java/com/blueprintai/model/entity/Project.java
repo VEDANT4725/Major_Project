@@ -29,11 +29,23 @@ public class Project {
 
     @Column(nullable = false, length = 50)
     @Builder.Default
-    private String model = "gemini-3.6-flash";
+    private String model = "groq-llama-3.3-70b";
 
     @Column(name = "current_version", nullable = false)
     @Builder.Default
     private int currentVersion = 0;
+
+    @Column(name = "vercel_project_name", length = 100)
+    private String vercelProjectName;
+
+    @Column(name = "vercel_deployment_id", length = 100)
+    private String vercelDeploymentId;
+
+    @Column(name = "vercel_deployment_url", length = 500)
+    private String vercelDeploymentUrl;
+
+    @Column(name = "vercel_last_deployed_at")
+    private Instant vercelLastDeployedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
