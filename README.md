@@ -1,4 +1,4 @@
-# 🚀 Blueprint AI
+# 🚀 Ai Website Generator
 
 > An intelligent, full-stack AI-powered website builder that generates, previews, versions, and exports modern React web applications using cutting-edge LLMs.
 
